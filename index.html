@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1a1a1a">
+<title>藍波 CaseVault · 個案資料庫</title>
+<style>
+:root {
+  --bg: #f7f5f0;
+  --surface: #ffffff;
+  --ink: #1a1a1a;
+  --ink-soft: #555;
+  --ink-mute: #999;
+  --line: rgba(0,0,0,0.08);
+  --line-strong: rgba(0,0,0,0.18);
+  --accent: #0f6e56;
+  --accent-soft: #E1F5EE;
+  --warn: #BA7517;
+  --warn-soft: #FAEEDA;
+  --danger: #A32D2D;
+  --danger-soft: #FCEBEB;
+  --radius: 10px;
+  --radius-lg: 14px;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.app { max-width: 960px; margin: 0 auto; padding: 16px 14px 80px; }
+
+.setup-screen {
+  max-width: 500px; margin: 60px auto; padding: 30px;
+  background: var(--surface); border-radius: var(--radius-lg); border: 1px solid var(--line);
+}
+.setup-screen h1 { margin: 0 0 6px; font-size: 22px; }
+.setup-screen p { color: var(--ink-soft); margin: 0 0 20px; font-size: 14px; }
+.setup-screen .field { margin-bottom: 14px; }
+
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+.header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+.header h1 .sub { color: var(--ink-mute); font-weight: 400; font-size: 13px; margin-left: 6px; }
+.user-pill {
+  font-size: 12px; color: var(--ink-soft);
+  background: var(--surface); padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: 999px;
+  display: flex; align-items: center; gap: 6px;
+}
+.sync-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
+.sync-dot.offline { background: var(--danger); }
+
+.tabs { display: flex; gap: 6px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.tab-btn {
+  padding: 10px 16px; font-size: 14px; font-weight: 500;
+  background: transparent; border: 1px solid var(--line);
+  border-radius: var(--radius); cursor: pointer; white-space: nowrap;
+  color: var(--ink-soft); transition: all 0.15s;
+  font-family: inherit;
+}
+.tab-btn:hover { border-color: var(--line-strong); color: var(--ink); }
+.tab-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+.panel { display: none; }
+.panel.active { display: block; animation: fadeIn 0.2s; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.scene-hint {
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px;
+  font-size: 13px;
+}
+.scene-hint .label { font-size: 11px; color: var(--ink-mute); margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+.scene-hint .text { margin: 0; font-weight: 500; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 18px; margin-bottom: 12px;
+}
+.card h3 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+.card-section { padding: 14px 0; border-top: 1px solid var(--line); }
+.card-section:first-child { border-top: none; padding-top: 0; }
+.card-section-title { font-size: 12px; color: var(--ink-mute); margin: 0 0 8px; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase; }
+
+.field { margin-bottom: 12px; }
+.field label { font-size: 13px; color: var(--ink-soft); display: block; margin-bottom: 5px; font-weight: 500; }
+.field label .req { color: var(--danger); margin-left: 2px; }
+.field .hint { font-size: 12px; color: var(--ink-mute); margin: 4px 0 0; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 560px) { .field-row { grid-template-columns: 1fr; } }
+
+input[type="text"], input[type="number"], input[type="date"], input[type="month"], input[type="tel"], input[type="password"], textarea, select {
+  width: 100%; padding: 10px 12px; font-size: 14px; font-family: inherit;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink);
+  transition: border-color 0.15s;
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--ink); }
+textarea { min-height: 80px; resize: vertical; line-height: 1.6; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font-size: 12px; padding: 6px 12px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line);
+  color: var(--ink-soft); cursor: pointer; user-select: none;
+  transition: all 0.12s; white-space: nowrap;
+}
+.chip:hover { border-color: var(--line-strong); }
+.chip.active { color: var(--ink); font-weight: 500; }
+.chip[data-dim="symptom"].active { background: #EEEDFE; border-color: #AFA9EC; color: #3C3489; }
+.chip[data-dim="population"].active { background: #E6F1FB; border-color: #85B7EB; color: #0C447C; }
+.chip[data-dim="method"].active { background: #FAEEDA; border-color: #EF9F27; color: #633806; }
+.chip[data-dim="outcome"].active { background: #FAECE7; border-color: #F0997B; color: #712B13; }
+.chip.add { border-style: dashed; color: var(--ink-mute); }
+
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.btn {
+  padding: 12px 20px; font-size: 14px; font-weight: 500;
+  border-radius: var(--radius); cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  transition: all 0.12s; font-family: inherit;
+}
+.btn:hover { border-color: var(--line-strong); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--ink); color: #fff; border-color: var(--ink); flex: 1; }
+.btn-primary:hover:not(:disabled) { background: #000; }
+.btn-ghost { background: transparent; }
+.btn-icon { padding: 10px 14px; display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.btn-danger { color: var(--danger); border-color: var(--danger-soft); }
+
+.level-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+@media (max-width: 560px) { .level-grid { grid-template-columns: 1fr; } }
+.level-card {
+  background: var(--surface); padding: 12px 14px; border-radius: var(--radius);
+  border: 1px solid var(--line); cursor: pointer;
+}
+.level-card.active { border-color: var(--ink); border-width: 2px; padding: 11px 13px; }
+.level-card .lv { font-size: 11px; color: var(--ink-mute); font-weight: 600; letter-spacing: 0.05em; }
+.level-card .ttl { font-size: 14px; font-weight: 500; margin: 2px 0 0; }
+.level-card .dsc { font-size: 11px; color: var(--ink-mute); margin: 1px 0 0; }
+
+.privacy-banner {
+  background: var(--warn-soft); border-radius: var(--radius);
+  padding: 10px 14px; font-size: 12px; color: #854F0B;
+  margin-bottom: 12px; display: flex; gap: 8px; align-items: flex-start;
+}
+
+.search-box {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 4px 4px 4px 12px; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 6px;
+}
+.search-box input { border: none; padding: 10px 6px; font-size: 15px; background: transparent; }
+.search-box input:focus { outline: none; }
+.search-box .search-btn {
+  padding: 8px 14px; background: var(--ink); color: #fff; border: none;
+  border-radius: var(--radius); cursor: pointer; font-size: 13px; font-family: inherit;
+}
+
+.filter-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.filter-bar .f-label { font-size: 11px; color: var(--ink-mute); margin: 0 0 3px; font-weight: 500; }
+.filter-bar select { font-size: 13px; padding: 8px 10px; }
+
+.result-count { font-size: 12px; color: var(--ink-mute); margin: 0 0 8px; }
+
+.case-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 8px;
+  cursor: pointer; transition: all 0.12s;
+}
+.case-card:hover { border-color: var(--line-strong); }
+.case-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; gap: 8px; }
+.case-name { font-weight: 600; font-size: 15px; margin: 0; }
+.case-meta { font-size: 11px; color: var(--ink-mute); margin: 2px 0 0; }
+.case-score {
+  font-size: 11px; padding: 3px 9px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); font-weight: 500;
+  white-space: nowrap;
+}
+.case-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.case-tags .tag { font-size: 11px; padding: 2px 8px; border-radius: 6px; }
+.tag-sym { background: #EEEDFE; color: #3C3489; }
+.tag-pop { background: #E6F1FB; color: #0C447C; }
+.tag-mth { background: #FAEEDA; color: #633806; }
+.tag-out { background: #FAECE7; color: #712B13; }
+.case-summary { font-size: 13px; color: var(--ink-soft); margin: 0; line-height: 1.5; }
+
+.consent-box {
+  background: #FAEEDA; border: 1px solid #EF9F27; border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.consent-box .title { font-weight: 600; font-size: 14px; color: #633806; margin: 0 0 6px; }
+.consent-opts { display: flex; flex-direction: column; gap: 4px; }
+.consent-opt { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #633806; cursor: pointer; padding: 4px 0; }
+.consent-opt input { margin-top: 3px; }
+
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: #fff; padding: 12px 20px;
+  border-radius: var(--radius); font-size: 14px; z-index: 1000;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s;
+  max-width: calc(100vw - 40px); text-align: center;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+.toast.error { background: var(--danger); }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+@media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+.stat { background: var(--surface); padding: 12px; border-radius: var(--radius); border: 1px solid var(--line); }
+.stat .n { font-size: 22px; font-weight: 600; line-height: 1; }
+.stat .l { font-size: 11px; color: var(--ink-mute); margin-top: 4px; }
+
+.event-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; }
+.event-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px 6px; text-align: center; cursor: pointer; font-size: 12px; transition: all 0.12s;
+}
+.event-card:hover { border-color: var(--line-strong); }
+.event-card .em { font-size: 18px; display: block; margin-bottom: 3px; }
+.event-card.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+.detail-view {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); z-index: 100;
+  display: none; align-items: flex-start; justify-content: center;
+  padding: 20px; overflow-y: auto;
+}
+.detail-view.show { display: flex; }
+.detail-card {
+  background: var(--surface); border-radius: var(--radius-lg);
+  max-width: 720px; width: 100%; padding: 24px;
+  margin: auto; max-height: 90vh; overflow-y: auto;
+}
+.detail-close {
+  float: right; background: transparent; border: none; font-size: 24px;
+  cursor: pointer; color: var(--ink-mute); padding: 0; line-height: 1;
+}
+
+.drive-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 12px; background: var(--accent-soft); color: var(--accent);
+  border-radius: var(--radius); font-size: 13px; text-decoration: none; font-weight: 500;
+  margin-top: 6px;
+}
+.drive-link:hover { opacity: 0.85; }
+
+.attachments-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.att-item {
+  font-size: 12px; padding: 6px 10px; background: var(--bg);
+  border-radius: var(--radius); display: flex; justify-content: space-between; align-items: center;
+}
+
+.loading { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--ink-mute); border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.footer-note {
+  margin-top: 24px; padding: 12px 14px; font-size: 11px; color: var(--ink-mute);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); line-height: 1.7;
+}
+
+.empty { text-align: center; padding: 40px 20px; color: var(--ink-mute); }
+.empty .ic { font-size: 32px; margin-bottom: 10px; }
+
+.progress-bar {
+  width: 100%; height: 4px; background: var(--line); border-radius: 2px;
+  overflow: hidden; margin-top: 6px;
+}
+.progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+</style>
+</head>
+<body>
+
+<div id="setup-screen" class="setup-screen" style="display:none;">
+  <h1>🔧 初次設定</h1>
+  <p>請輸入後台設定資訊 (可向 Gary 索取)。設定會儲存在這台裝置的瀏覽器中。</p>
+  <div class="field">
+    <label>Apps Script Web App URL</label>
+    <input type="text" id="setup-url" placeholder="https://script.google.com/macros/s/XXXX/exec">
+  </div>
+  <div class="field">
+    <label>Secret Key</label>
+    <input type="password" id="setup-key" placeholder="後台設定的 SECRET_KEY">
+  </div>
+  <div class="field">
+    <label>你的名字 (教練)</label>
+    <select id="setup-coach">
+      <option value="">選擇...</option>
+      <option>阿明</option>
+      <option>小傑</option>
+      <option>阿芳</option>
+      <option>Gary</option>
+    </select>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-primary" onclick="completeSetup()">完成設定</button>
+  </div>
+</div>
+
+<div class="app" id="main-app" style="display:none;">
+
+  <div class="header">
+    <h1>藍波 CaseVault <span class="sub">· 個案資料庫</span></h1>
+    <div class="user-pill">
+      <span class="sync-dot" id="sync-dot"></span>
+      <span id="coach-name">教練</span>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="quick">⚡ 快速版</button>
+    <button class="tab-btn" data-tab="deep">📋 深度建檔</button>
+    <button class="tab-btn" data-tab="search">🔍 檢索</button>
+    <button class="tab-btn" data-tab="admin">⚙️ 設定</button>
+  </div>
+
+  <!-- QUICK -->
+  <div class="panel active" id="panel-quick">
+    <div class="scene-hint">
+      <p class="label">使用情境</p>
+      <p class="text">手機快速記下一個值得記錄的時刻 (3 分鐘內)</p>
+    </div>
+
+    <div class="card">
+      <div class="field">
+        <label>學員 <span class="req">*</span></label>
+        <select id="q-student"><option value="">載入中...</option></select>
+      </div>
+
+      <div class="field">
+        <label>事件類型 <span class="req">*</span></label>
+        <div class="event-grid" id="q-event-grid"></div>
+      </div>
+
+      <div class="field">
+        <label>發生什麼事? <span class="req">*</span></label>
+        <textarea id="q-content" placeholder="例: 王○○今天第一次可以把手舉過頭綁頭髮..."></textarea>
+        <p class="hint">💡 寫原話比寫摘要有價值</p>
+      </div>
+
+      <div class="field">
+        <label>標籤 (多選)</label>
+        <div class="chips" id="q-tags"></div>
+      </div>
+
+      <div class="field">
+        <label>附件 (將自動存入該學員的 Google Drive 資料夾)</label>
+        <input type="file" id="q-files" multiple accept="image/*,video/*,audio/*" style="display:none;" onchange="handleFiles(this.files)">
+        <div class="btn-row" style="margin-top: 0;">
+          <button class="btn btn-icon" type="button" onclick="document.getElementById('q-files').click()">📎 選擇檔案</button>
+        </div>
+        <div class="attachments-list" id="q-attachments"></div>
+        <div id="q-progress-wrap" style="display:none;">
+          <div class="progress-bar"><div class="progress-fill" id="q-progress"></div></div>
+          <p class="hint" id="q-progress-text">準備上傳...</p>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-save-quick" onclick="saveQuick()">儲存並同步 ↗</button>
+        <button class="btn btn-ghost" onclick="resetQuick()">清除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEEP -->
+  <div class="panel" id="panel-deep">
+    <div class="scene-hint">
+      <p class="label">使用情境</p>
+      <p class="text">新學員建檔 / 每月摘要 (15-20 分鐘)</p>
+    </div>
+
+    <div class="level-grid">
+      <div class="level-card active" onclick="switchLevel('L1')" id="lv-L1">
+        <div class="lv">L1</div><div class="ttl">基本檔案</div><div class="dsc">建檔一次</div>
+      </div>
+      <div class="level-card" onclick="switchLevel('L2')" id="lv-L2">
+        <div class="lv">L2</div><div class="ttl">月度摘要</div><div class="dsc">每月更新</div>
+      </div>
+      <div class="level-card" onclick="switchLevel('L3')" id="lv-L3">
+        <div class="lv">L3</div><div class="ttl">里程碑</div><div class="dsc">用快速版填</div>
+      </div>
+    </div>
+
+    <div class="privacy-banner">
+      🔒 <span><strong>隱私分級:</strong>真實姓名、聯絡電話只有 Gary 和主責教練看得到。新學員建檔後會自動在 Drive 建立專屬資料夾。</span>
+    </div>
+
+    <!-- L1 -->
+    <div class="card" id="form-L1">
+      <h3>L1 · 基本檔案</h3>
+
+      <div class="card-section">
+        <p class="card-section-title">身份資訊</p>
+        <div class="field-row">
+          <div class="field">
+            <label>真實姓名 <span class="req">*</span></label>
+            <input type="text" id="d-name-real" placeholder="王美玲">
+          </div>
+          <div class="field">
+            <label>顯示名 (化名) <span class="req">*</span></label>
+            <input type="text" id="d-name-display" placeholder="王○○">
+          </div>
+          <div class="field">
+            <label>聯絡電話</label>
+            <input type="tel" id="d-phone" placeholder="0912-XXX-XXX">
+          </div>
+          <div class="field">
+            <label>主責教練 <span class="req">*</span></label>
+            <select id="d-coach"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <p class="card-section-title">基本特徵</p>
+        <div class="field-row">
+          <div class="field"><label>年齡區間 <span class="req">*</span></label><select id="d-age"></select></div>
+          <div class="field"><label>性別 <span class="req">*</span></label><select id="d-gender"><option>女</option><option>男</option></select></div>
+        </div>
+        <div class="field">
+          <label>👥 族群特徵 (多選)</label>
+          <div class="chips" id="d-pop-tags"></div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <p class="card-section-title">🏥 症狀與病史</p>
+        <div class="field">
+          <label>症狀/疾病 (多選)</label>
+          <div class="chips" id="d-sym-tags"></div>
+        </div>
+        <div class="field">
+          <label>主訴 (建議記原話)</label>
+          <textarea id="d-complaint" placeholder="「我手舉不起來,連晾衣服都做不到...」"></textarea>
+        </div>
+        <div class="field">
+          <label>病史/診斷</label>
+          <textarea id="d-history"></textarea>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <p class="card-section-title">🎯 目標</p>
+        <div class="field"><label>短期 (3 個月)</label><textarea id="d-goal-short"></textarea></div>
+        <div class="field"><label>長期</label><textarea id="d-goal-long"></textarea></div>
+      </div>
+
+      <div class="card-section">
+        <div class="consent-box">
+          <p class="title">📝 學員使用同意等級</p>
+          <p style="font-size: 12px; margin: 0 0 8px; color: #854F0B;">未來本案例可用於哪些用途?請學員確認</p>
+          <div class="consent-opts">
+            <label class="consent-opt"><input type="radio" name="d-consent" value="1"><span><strong>Level 1 · 完全公開</strong> — Podcast/社群可含真名照片</span></label>
+            <label class="consent-opt"><input type="radio" name="d-consent" value="2" checked><span><strong>Level 2 · 去識別化分享</strong> — 內容行銷需模糊化</span></label>
+            <label class="consent-opt"><input type="radio" name="d-consent" value="3"><span><strong>Level 3 · 內部教學</strong> — 教練培訓引用</span></label>
+            <label class="consent-opt"><input type="radio" name="d-consent" value="4"><span><strong>Level 4 · 僅存檔</strong> — 主責+Gary 可查</span></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="saveStudent()">儲存並同步 ↗</button>
+      </div>
+    </div>
+
+    <!-- L2 -->
+    <div class="card" id="form-L2" style="display:none;">
+      <h3>L2 · 月度訓練摘要</h3>
+      <div class="card-section">
+        <div class="field-row">
+          <div class="field"><label>學員 <span class="req">*</span></label><select id="l-student"></select></div>
+          <div class="field"><label>紀錄月份 <span class="req">*</span></label><input type="month" id="l-month"></div>
+        </div>
+      </div>
+      <div class="card-section">
+        <p class="card-section-title">🏋️ 訓練方法 (多選)</p>
+        <div class="chips" id="l-method-tags"></div>
+      </div>
+      <div class="card-section">
+        <p class="card-section-title">📊 指標變化</p>
+        <div class="field-row">
+          <div class="field"><label>ROM 變化</label><input type="text" id="l-rom" placeholder="外展 90→120°"></div>
+          <div class="field"><label>VAS 疼痛</label><input type="text" id="l-pain" placeholder="7→4"></div>
+          <div class="field"><label>功能性測試</label><input type="text" id="l-functional"></div>
+          <div class="field"><label>出席</label><input type="text" id="l-attendance" placeholder="8/8"></div>
+        </div>
+      </div>
+      <div class="card-section">
+        <p class="card-section-title">✨ 成效標籤</p>
+        <div class="chips" id="l-outcome-tags"></div>
+      </div>
+      <div class="card-section">
+        <div class="field"><label>本月進展</label><textarea id="l-progress"></textarea></div>
+        <div class="field"><label>瓶頸/下月調整</label><textarea id="l-bottleneck"></textarea></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="saveLog()">儲存並同步 ↗</button>
+      </div>
+    </div>
+
+    <div class="card" id="form-L3" style="display:none;">
+      <h3>L3 · 里程碑事件</h3>
+      <p style="color: var(--ink-mute); font-size: 13px;">L3 與「快速版」是同一份資料,建議直接用快速版填寫。</p>
+      <button class="btn" onclick="document.querySelector('.tab-btn[data-tab=quick]').click()">→ 切到快速版</button>
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="panel" id="panel-search">
+    <div class="scene-hint">
+      <p class="label">使用情境</p>
+      <p class="text">「我明天要接一個膝蓋痛的阿姨,有沒有類似案例?」</p>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="search-box">
+      <span>🔍</span>
+      <input type="text" id="search-input" placeholder="試試:五十肩 / 椎間盤+DNS / 疼痛改善..." onkeypress="if(event.key==='Enter')runSearch()">
+      <button class="search-btn" onclick="runSearch()">搜尋</button>
+    </div>
+
+    <div class="filter-bar">
+      <div><p class="f-label">🏥 症狀</p><select id="f-symptom"><option value="">全部</option></select></div>
+      <div><p class="f-label">👥 族群</p><select id="f-population"><option value="">全部</option></select></div>
+      <div><p class="f-label">🏋️ 方法</p><select id="f-method"><option value="">全部</option></select></div>
+      <div><p class="f-label">✨ 成效</p><select id="f-outcome"><option value="">全部</option></select></div>
+    </div>
+
+    <p class="result-count" id="result-count"></p>
+    <div id="case-list"></div>
+  </div>
+
+  <!-- ADMIN -->
+  <div class="panel" id="panel-admin">
+    <div class="scene-hint">
+      <p class="label">Settings</p>
+      <p class="text">本機連線設定 (僅這台裝置生效)</p>
+    </div>
+
+    <div class="card">
+      <h3>Connection</h3>
+      <div class="field"><label>Apps Script Web App URL</label><input type="text" id="cfg-url"></div>
+      <div class="field"><label>Secret Key</label><input type="password" id="cfg-key"></div>
+      <div class="field"><label>當前教練</label><select id="cfg-coach"></select></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="saveConfig()">儲存設定</button>
+        <button class="btn" onclick="testConnection()">測試連線</button>
+        <button class="btn btn-danger" onclick="resetConfig()">重設</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>System Info</h3>
+      <p style="font-size: 12px; color: var(--ink-mute); margin: 0;">
+        Version: <span id="info-version">2.0</span><br>
+        Last sync: <span id="info-sync">—</span><br>
+        Cached students: <span id="info-cache">—</span><br>
+        Drive root: <span id="info-drive">—</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    📌 文字資料存 Google Sheets · 媒體檔案存 Google Drive (每學員一個子資料夾) · 離線可填,連線後自動同步
+  </div>
+</div>
+
+<div class="detail-view" id="detail-view">
+  <div class="detail-card">
+    <button class="detail-close" onclick="closeDetail()">×</button>
+    <div id="detail-content"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CFG_KEY = 'lanbo_casevault_config';
+const CACHE_KEY = 'lanbo_casevault_cache';
+
+let CFG = {};
+let TAGS = { symptom: [], population: [], method: [], outcome: [] };
+let STUDENTS = [];
+let SETTINGS = {};
+let CURRENT_FILES = [];
+
+function init() {
+  CFG = JSON.parse(localStorage.getItem(CFG_KEY) || '{}');
+  if (!CFG.url || !CFG.key || !CFG.coach) {
+    document.getElementById('setup-screen').style.display = 'block';
+    return;
+  }
+  document.getElementById('main-app').style.display = 'block';
+  document.getElementById('coach-name').textContent = '教練:' + CFG.coach;
+  bindTabs();
+  loadInitialData();
+}
+
+function completeSetup() {
+  const url = document.getElementById('setup-url').value.trim();
+  const key = document.getElementById('setup-key').value.trim();
+  const coach = document.getElementById('setup-coach').value;
+  if (!url || !key || !coach) return showToast('請填完所有欄位', 'error');
+  CFG = { url, key, coach };
+  localStorage.setItem(CFG_KEY, JSON.stringify(CFG));
+  location.reload();
+}
+
+function bindTabs() {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+      if (btn.dataset.tab === 'admin') populateAdmin();
+      if (btn.dataset.tab === 'search') runSearch();
+    });
+  });
+}
+
+async function loadInitialData() {
+  try {
+    setSync('online');
+    const [settings, tags, students] = await Promise.all([
+      api('get_settings'),
+      api('list_tags'),
+      api('list_students', { coach: CFG.coach })
+    ]);
+    SETTINGS = settings;
+    TAGS = tags.tags;
+    STUDENTS = students.items || [];
+    cacheData({ settings, tags, students: STUDENTS });
+    renderAll();
+  } catch (err) {
+    setSync('offline');
+    showToast('連線失敗,使用本地快取', 'error');
+    const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
+    if (cache.settings) SETTINGS = cache.settings;
+    if (cache.tags) TAGS = cache.tags.tags;
+    if (cache.students) STUDENTS = cache.students;
+    renderAll();
+  }
+}
+
+function renderAll() {
+  renderEventTypes();
+  renderQuickTags();
+  renderStudentSelects();
+  renderDeepTags();
+  renderConfigSelects();
+  renderSearchFilters();
+  renderStats();
+}
+
+async function api(action, payload) {
+  const body = { key: CFG.key, action, ...payload };
+  const res = await fetch(CFG.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'API error');
+  return data;
+}
+
+function setSync(state) {
+  const dot = document.getElementById('sync-dot');
+  if (dot) dot.classList.toggle('offline', state === 'offline');
+}
+
+function cacheData(d) { localStorage.setItem(CACHE_KEY, JSON.stringify(d)); }
+
+function renderEventTypes() {
+  const types = (SETTINGS.event_types || []);
+  const emojiMap = {'突破時刻':'🎯','發現問題':'⚠️','方法調整':'💡','動人故事':'❤️','數據突破':'📊'};
+  document.getElementById('q-event-grid').innerHTML = types.map(t =>
+    `<div class="event-card" data-event="${t}" onclick="pickEvent(this)"><span class="em">${emojiMap[t]||'•'}</span>${t}</div>`
+  ).join('');
+}
+
+function pickEvent(el) {
+  document.querySelectorAll('#q-event-grid .event-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function renderQuickTags() {
+  const all = [
+    ...(TAGS.symptom||[]).slice(0, 4).map(t => ({...t, dimension: 'symptom'})),
+    ...(TAGS.method||[]).slice(0, 3).map(t => ({...t, dimension: 'method'})),
+    ...(TAGS.outcome||[]).slice(0, 3).map(t => ({...t, dimension: 'outcome'}))
+  ];
+  document.getElementById('q-tags').innerHTML = all.map(t =>
+    `<span class="chip" data-dim="${t.dimension}" data-tag="${t.tag_name}" onclick="toggleChip(this)">${t.tag_name}</span>`
+  ).join('') + '<span class="chip add" onclick="addTagPrompt()">+ 新標籤</span>';
+}
+
+function renderStudentSelects() {
+  const opts = '<option value="">選擇學員...</option>' +
+    STUDENTS.map(s => `<option value="${s.student_id}">${s.name_display} (${s.age_range}・${s.symptom_tags||''})</option>`).join('') +
+    '<option value="__new__">+ 新增學員 (跳到深度建檔)</option>';
+  document.getElementById('q-student').innerHTML = opts;
+  if (document.getElementById('l-student')) {
+    document.getElementById('l-student').innerHTML =
+      '<option value="">選擇...</option>' +
+      STUDENTS.map(s => `<option value="${s.student_id}">${s.name_display} (${s.age_range})</option>`).join('');
+  }
+  document.getElementById('q-student').onchange = function() {
+    if (this.value === '__new__') {
+      document.querySelector('.tab-btn[data-tab=deep]').click();
+      this.value = '';
+    }
+  };
+}
+
+function renderDeepTags() {
+  document.getElementById('d-pop-tags').innerHTML =
+    (TAGS.population||[]).map(t =>
+      `<span class="chip" data-dim="population" data-tag="${t.tag_name}" onclick="toggleChip(this)">${t.tag_name}</span>`
+    ).join('') + '<span class="chip add" onclick="addTagPrompt(\'population\')">+ 新增</span>';
+
+  document.getElementById('d-sym-tags').innerHTML =
+    (TAGS.symptom||[]).map(t =>
+      `<span class="chip" data-dim="symptom" data-tag="${t.tag_name}" onclick="toggleChip(this)">${t.tag_name}</span>`
+    ).join('') + '<span class="chip add" onclick="addTagPrompt(\'symptom\')">+ 新增</span>';
+
+  if (document.getElementById('l-method-tags')) {
+    document.getElementById('l-method-tags').innerHTML =
+      (TAGS.method||[]).map(t =>
+        `<span class="chip" data-dim="method" data-tag="${t.tag_name}" onclick="toggleChip(this)">${t.tag_name}</span>`
+      ).join('');
+    document.getElementById('l-outcome-tags').innerHTML =
+      (TAGS.outcome||[]).map(t =>
+        `<span class="chip" data-dim="outcome" data-tag="${t.tag_name}" onclick="toggleChip(this)">${t.tag_name}</span>`
+      ).join('');
+  }
+
+  const coaches = SETTINGS.coaches || [];
+  document.getElementById('d-coach').innerHTML = coaches.map(c => `<option ${c===CFG.coach?'selected':''}>${c}</option>`).join('');
+
+  const ages = SETTINGS.age_ranges || ['30-39','40-49','50-59','60-69','70+'];
+  document.getElementById('d-age').innerHTML = ages.map(a => `<option>${a}</option>`).join('');
+
+  if (document.getElementById('l-month') && !document.getElementById('l-month').value) {
+    const now = new Date();
+    document.getElementById('l-month').value = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  }
+}
+
+function renderSearchFilters() {
+  const setOpts = (id, list) => {
+    const el = document.getElementById(id);
+    el.innerHTML = '<option value="">全部</option>' + list.map(t => `<option>${t.tag_name}</option>`).join('');
+  };
+  setOpts('f-symptom', TAGS.symptom||[]);
+  setOpts('f-population', TAGS.population||[]);
+  setOpts('f-method', TAGS.method||[]);
+  setOpts('f-outcome', TAGS.outcome||[]);
+}
+
+function renderStats() {
+  const html = `
+    <div class="stat"><div class="n">${STUDENTS.length}</div><div class="l">總個案</div></div>
+    <div class="stat"><div class="n">${STUDENTS.filter(s=>s.status==='追蹤中').length}</div><div class="l">追蹤中</div></div>
+    <div class="stat"><div class="n">${STUDENTS.filter(s=>s.consent_level==1||s.consent_level==2).length}</div><div class="l">可分享</div></div>
+    <div class="stat"><div class="n">${STUDENTS.filter(s=>s.coach_main===CFG.coach).length}</div><div class="l">我負責</div></div>
+  `;
+  document.getElementById('stats').innerHTML = html;
+}
+
+function toggleChip(el) {
+  if (el.classList.contains('add')) return;
+  el.classList.toggle('active');
+}
+
+function getSelectedTags(containerSelector) {
+  return [...document.querySelectorAll(containerSelector + ' .chip.active')]
+    .map(c => c.dataset.tag || c.textContent.trim());
+}
+
+// ============ QUICK ============
+function handleFiles(files) {
+  for (const f of files) CURRENT_FILES.push(f);
+  renderAttachments();
+}
+
+function renderAttachments() {
+  const html = CURRENT_FILES.map((f, i) =>
+    `<div class="att-item"><span>📎 ${f.name} (${(f.size/1024).toFixed(0)} KB)</span>
+     <button class="btn btn-icon" style="padding:4px 8px;" onclick="CURRENT_FILES.splice(${i},1);renderAttachments()">×</button></div>`
+  ).join('');
+  document.getElementById('q-attachments').innerHTML = html;
+}
+
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function updateProgress(current, total, text) {
+  const wrap = document.getElementById('q-progress-wrap');
+  const bar = document.getElementById('q-progress');
+  const txt = document.getElementById('q-progress-text');
+  wrap.style.display = 'block';
+  bar.style.width = (current/total * 100) + '%';
+  txt.textContent = text;
+}
+
+async function saveQuick() {
+  const studentId = document.getElementById('q-student').value;
+  const content = document.getElementById('q-content').value.trim();
+  const eventCard = document.querySelector('#q-event-grid .event-card.active');
+  if (!studentId || studentId === '__new__' || !content || !eventCard) {
+    return showToast('⚠️ 請填完必填欄位', 'error');
+  }
+
+  const btn = document.getElementById('btn-save-quick');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading"></span>儲存中...';
+
+  try {
+    const attachments = [];
+    const total = CURRENT_FILES.length;
+    for (let i = 0; i < CURRENT_FILES.length; i++) {
+      const f = CURRENT_FILES[i];
+      updateProgress(i, total, `上傳 ${f.name} (${i+1}/${total})...`);
+      const b64 = await fileToBase64(f);
+      const upRes = await api('upload_to_drive', {
+        payload: {
+          student_id: studentId,
+          subfolder: 'milestones',
+          filename: new Date().toISOString().slice(0,10) + '_' + f.name,
+          mime_type: f.type,
+          file_base64: b64
+        }
+      });
+      if (upRes.file_url) attachments.push(upRes.file_url);
+    }
+    if (total > 0) updateProgress(total, total, '檔案上傳完成');
+
+    const sym = [...document.querySelectorAll('#q-tags .chip.active[data-dim=symptom]')].map(c=>c.dataset.tag);
+    const mth = [...document.querySelectorAll('#q-tags .chip.active[data-dim=method]')].map(c=>c.dataset.tag);
+    const out = [...document.querySelectorAll('#q-tags .chip.active[data-dim=outcome]')].map(c=>c.dataset.tag);
+
+    await api('save_milestone', {
+      payload: {
+        student_id: studentId,
+        event_type: eventCard.dataset.event,
+        content: content,
+        symptom_tags: sym.join(', '),
+        method_tags: mth.join(', '),
+        outcome_tags: out.join(', '),
+        attachments: attachments.join(', '),
+        source: 'quick',
+        created_by: CFG.coach
+      }
+    });
+
+    showToast('✓ 已儲存並同步');
+    resetQuick();
+  } catch (err) {
+    showToast('儲存失敗:' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '儲存並同步 ↗';
+    document.getElementById('q-progress-wrap').style.display = 'none';
+  }
+}
+
+function resetQuick() {
+  document.getElementById('q-student').value = '';
+  document.getElementById('q-content').value = '';
+  document.querySelectorAll('#q-event-grid .event-card').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('#q-tags .chip.active').forEach(c => c.classList.remove('active'));
+  CURRENT_FILES = [];
+  renderAttachments();
+}
+
+// ============ DEEP ============
+function switchLevel(lv) {
+  ['L1','L2','L3'].forEach(l => {
+    document.getElementById('lv-' + l).classList.toggle('active', l === lv);
+    document.getElementById('form-' + l).style.display = (l === lv) ? 'block' : 'none';
+  });
+}
+
+async function saveStudent() {
+  const consent = document.querySelector('input[name=d-consent]:checked');
+  const payload = {
+    name_real: document.getElementById('d-name-real').value.trim(),
+    name_display: document.getElementById('d-name-display').value.trim(),
+    phone: document.getElementById('d-phone').value.trim(),
+    coach_main: document.getElementById('d-coach').value,
+    age_range: document.getElementById('d-age').value,
+    gender: document.getElementById('d-gender').value,
+    population_tags: getSelectedTags('#d-pop-tags').join(', '),
+    symptom_tags: getSelectedTags('#d-sym-tags').join(', '),
+    chief_complaint: document.getElementById('d-complaint').value.trim(),
+    medical_history: document.getElementById('d-history').value.trim(),
+    goal_short: document.getElementById('d-goal-short').value.trim(),
+    goal_long: document.getElementById('d-goal-long').value.trim(),
+    consent_level: consent ? consent.value : '2',
+    status: '追蹤中',
+    created_by: CFG.coach
+  };
+  if (!payload.name_real || !payload.name_display) return showToast('請填寫姓名', 'error');
+
+  try {
+    const res = await api('save_student', { payload });
+    showToast('✓ 學員已建檔 (' + res.student_id + ') · Drive 資料夾已自動建立');
+    loadInitialData();
+  } catch (err) {
+    showToast('儲存失敗:' + err.message, 'error');
+  }
+}
+
+async function saveLog() {
+  const studentId = document.getElementById('l-student').value;
+  const month = document.getElementById('l-month').value;
+  if (!studentId || !month) return showToast('請選學員與月份', 'error');
+
+  const payload = {
+    student_id: studentId,
+    year_month: month,
+    method_tags: getSelectedTags('#l-method-tags').join(', '),
+    outcome_tags: getSelectedTags('#l-outcome-tags').join(', '),
+    metric_rom: document.getElementById('l-rom').value.trim(),
+    metric_pain: document.getElementById('l-pain').value.trim(),
+    metric_functional: document.getElementById('l-functional').value.trim(),
+    attendance: document.getElementById('l-attendance').value.trim(),
+    progress_summary: document.getElementById('l-progress').value.trim(),
+    bottleneck: document.getElementById('l-bottleneck').value.trim(),
+    created_by: CFG.coach
+  };
+  try {
+    const res = await api('save_log', { payload });
+    showToast('✓ 月度摘要已儲存 (' + res.log_id + ')');
+  } catch (err) {
+    showToast('儲存失敗:' + err.message, 'error');
+  }
+}
+
+// ============ SEARCH ============
+async function runSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  const sym = document.getElementById('f-symptom').value;
+  const pop = document.getElementById('f-population').value;
+  const mth = document.getElementById('f-method').value;
+  const out = document.getElementById('f-outcome').value;
+
+  document.getElementById('result-count').textContent = '搜尋中...';
+  try {
+    const res = await api('search', { query: q, symptom: sym, population: pop, method: mth, outcome: out });
+    renderResults(res.items || []);
+  } catch (err) {
+    document.getElementById('result-count').textContent = '搜尋失敗:' + err.message;
+  }
+}
+
+function renderResults(items) {
+  document.getElementById('result-count').textContent = `找到 ${items.length} 個案例`;
+  if (items.length === 0) {
+    document.getElementById('case-list').innerHTML = '<div class="empty"><div class="ic">🔍</div>沒有符合條件的案例</div>';
+    return;
+  }
+  const consentLabel = (lv) => ({1:'🟢 完全公開',2:'🟢 去識別化',3:'🟡 內部教學',4:'🔴 僅存檔'}[lv] || '');
+  const html = items.map(r => {
+    const s = r.student;
+    const symTags = (s.symptom_tags||'').split(',').map(t=>t.trim()).filter(Boolean).map(t=>`<span class="tag tag-sym">${t}</span>`).join('');
+    const popTags = (s.population_tags||'').split(',').map(t=>t.trim()).filter(Boolean).map(t=>`<span class="tag tag-pop">${t}</span>`).join('');
+    const lastM = r.latest_milestone;
+    return `<div class="case-card" onclick="showDetail('${s.student_id}')">
+      <div class="case-head">
+        <div>
+          <p class="case-name">${s.name_display} · ${s.age_range}${s.gender}</p>
+          <p class="case-meta">主責:${s.coach_main} · ${consentLabel(s.consent_level)} · L2:${r.log_count} L3:${r.milestone_count}</p>
+        </div>
+        <span class="case-score">${r.score}分</span>
+      </div>
+      <div class="case-tags">${symTags}${popTags}</div>
+      <p class="case-summary">${lastM ? (lastM.content||'').substring(0,90)+'...' : (s.chief_complaint||'').substring(0,90)}</p>
+    </div>`;
+  }).join('');
+  document.getElementById('case-list').innerHTML = html;
+}
+
+async function showDetail(studentId) {
+  try {
+    const [stuRes, logsRes, msRes, folderRes] = await Promise.all([
+      api('get_student', { student_id: studentId }),
+      api('list_logs', { student_id: studentId }),
+      api('list_milestones', { student_id: studentId }),
+      api('get_student_folder', { student_id: studentId })
+    ]);
+    const s = stuRes.item;
+    const logs = logsRes.items || [];
+    const ms = msRes.items || [];
+
+    const folderLink = folderRes.ok
+      ? `<a href="${folderRes.folder_url}" target="_blank" class="drive-link">📁 開啟 Drive 資料夾</a>`
+      : '';
+
+    const html = `
+      <h2 style="margin:0 0 4px;">${s.name_display}</h2>
+      <p style="color:var(--ink-mute);margin:0 0 16px;font-size:13px;">${s.age_range}${s.gender} · 主責:${s.coach_main} · ${s.status}</p>
+      ${folderLink}
+      <h4 style="margin-top:18px;">主訴</h4><p>${s.chief_complaint||'—'}</p>
+      <h4>病史</h4><p>${s.medical_history||'—'}</p>
+      <h4>目標</h4><p>短期:${s.goal_short||'—'}<br>長期:${s.goal_long||'—'}</p>
+      <h4>L3 里程碑事件 (${ms.length} 筆)</h4>
+      ${ms.slice(0,5).map(m => `<div style="padding:10px;background:var(--bg);border-radius:8px;margin-bottom:6px;font-size:13px;">
+        <strong>${m.event_date} · ${m.event_type}</strong><br>${m.content||''}
+        ${m.attachments ? '<br><span style="font-size:11px;color:var(--ink-mute);">📎 附件 ' + m.attachments.split(',').length + ' 個</span>' : ''}
+      </div>`).join('') || '<p>無</p>'}
+      <h4>L2 月度摘要 (${logs.length} 筆)</h4>
+      ${logs.slice(0,3).map(l => `<div style="padding:10px;background:var(--bg);border-radius:8px;margin-bottom:6px;font-size:13px;">
+        <strong>${l.year_month}</strong> · ${l.method_tags||''}<br>${l.progress_summary||''}
+      </div>`).join('') || '<p>無</p>'}
+    `;
+    document.getElementById('detail-content').innerHTML = html;
+    document.getElementById('detail-view').classList.add('show');
+  } catch (err) {
+    showToast('載入失敗:' + err.message, 'error');
+  }
+}
+
+function closeDetail() {
+  document.getElementById('detail-view').classList.remove('show');
+}
+
+// ============ ADMIN ============
+function populateAdmin() {
+  document.getElementById('cfg-url').value = CFG.url || '';
+  document.getElementById('cfg-key').value = CFG.key || '';
+  renderConfigSelects();
+  document.getElementById('info-version').textContent = SETTINGS.version || '2.0';
+  document.getElementById('info-cache').textContent = STUDENTS.length + ' 學員';
+  document.getElementById('info-drive').textContent = SETTINGS.drive_root_id ? '已設定' : '未設定 (執行 test_init_root_folder)';
+}
+
+function renderConfigSelects() {
+  const coaches = SETTINGS.coaches && SETTINGS.coaches.length ? SETTINGS.coaches : ['阿明','小傑','阿芳','Gary'];
+  const sel = document.getElementById('cfg-coach');
+  sel.innerHTML = coaches.map(c => `<option ${c===CFG.coach?'selected':''}>${c}</option>`).join('');
+}
+
+function saveConfig() {
+  CFG.url = document.getElementById('cfg-url').value.trim();
+  CFG.key = document.getElementById('cfg-key').value.trim();
+  CFG.coach = document.getElementById('cfg-coach').value;
+  localStorage.setItem(CFG_KEY, JSON.stringify(CFG));
+  showToast('設定已儲存');
+  setTimeout(() => location.reload(), 800);
+}
+
+async function testConnection() {
+  try {
+    const r = await api('ping');
+    showToast('✓ 連線正常 (' + r.ts + ')');
+  } catch (err) {
+    showToast('連線失敗:' + err.message, 'error');
+  }
+}
+
+function resetConfig() {
+  if (!confirm('確定要重設嗎?所有本機設定會清除。')) return;
+  localStorage.removeItem(CFG_KEY);
+  localStorage.removeItem(CACHE_KEY);
+  location.reload();
+}
+
+// ============ TAGS ============
+async function addTagPrompt(dim) {
+  const dimension = dim || prompt('維度 (symptom/population/method/outcome)?', 'symptom');
+  if (!dimension) return;
+  const name = prompt('標籤名稱?');
+  if (!name) return;
+  try {
+    await api('add_tag', { payload: { dimension, tag_name: name, created_by: CFG.coach } });
+    showToast('✓ 標籤已新增 (待管理員核准)');
+    loadInitialData();
+  } catch (err) {
+    showToast('新增失敗:' + err.message, 'error');
+  }
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type === 'error' ? ' error' : '');
+  clearTimeout(window._toastT);
+  window._toastT = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+init();
+</script>
+
+</body>
+</html>
