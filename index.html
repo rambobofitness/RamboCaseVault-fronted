@@ -521,6 +521,7 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.6; }
       <span>🔍</span>
       <input type="text" id="search-input" placeholder="試試:五十肩 / 椎間盤+DNS / 疼痛改善..." oninput="debouncedSearch()" onkeypress="if(event.key==='Enter')runSearch()">
       <button class="search-btn" onclick="runSearch()">搜尋</button>
+      <button class="search-btn" style="background:transparent;color:var(--ink-soft);border:1px solid var(--line);" onclick="forceReload()" title="強制重新載入(在 Google Sheets 直接編輯後使用)">🔄</button>
     </div>
 
     <div class="filter-bar">
@@ -579,8 +580,8 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.6; }
 <div class="toast" id="toast"></div>
 
 <script>
-const CFG_KEY = 'Rambo_casevault_config';
-const CACHE_KEY = 'Rambo_casevault_cache';
+const CFG_KEY = 'lanbo_casevault_config';
+const CACHE_KEY = 'lanbo_casevault_cache';
 
 let CFG = {};
 let TAGS = { symptom: [], population: [], method: [], outcome: [] };
@@ -1025,6 +1026,49 @@ function debouncedSearch() {
   _searchTimer = setTimeout(runSearch, 400);
 }
 
+// Force-clear all caches (front + back end), then reload data
+async function forceReload() {
+  showToast('🔄 強制重新整理中...');
+  try {
+    // Clear backend cache
+    await api('force_reload');
+    // Clear frontend cache
+    _searchCache = {};
+    localStorage.removeItem(CACHE_KEY);
+    // Reload everything
+    await loadInitialData();
+    // Re-run search if on search panel
+    if (document.querySelector('.tab-btn[data-tab=search]').classList.contains('active')) {
+      runSearch();
+    }
+    showToast('✓ 已強制重新載入');
+  } catch (err) {
+    showToast('重新載入失敗:' + err.message, 'error');
+  }
+}
+
+// Delete a student (with cascade to logs and milestones)
+async function deleteStudent(studentId, displayName) {
+  if (!confirm(`⚠️ 確定要刪除學員「${displayName}」?\n\n會一併刪除該學員所有的:\n- L2 月度紀錄\n- L3 里程碑事件\n\n(Drive 資料夾不會自動刪除,如需刪除請去 Drive 手動處理)\n\n此操作無法復原。`)) {
+    return;
+  }
+  try {
+    showToast('刪除中...');
+    const res = await api('delete_student', { student_id: studentId });
+    showToast(`✓ 已刪除 ${displayName} (含 ${res.deleted_logs} 筆 L2 + ${res.deleted_milestones} 筆 L3)`);
+    // Update local state
+    STUDENTS = STUDENTS.filter(s => s.student_id !== studentId);
+    _searchCache = {};
+    cacheData({ settings: SETTINGS, tags: { tags: TAGS }, students: STUDENTS });
+    renderStudentSelects();
+    renderStats();
+    closeDetail();
+    runSearch();
+  } catch (err) {
+    showToast('刪除失敗:' + err.message, 'error');
+  }
+}
+
 function renderResults(items) {
   document.getElementById('result-count').textContent = `找到 ${items.length} 個案例`;
   if (items.length === 0) {
@@ -1069,8 +1113,13 @@ async function showDetail(studentId) {
       : '';
 
     const html = `
-      <h2 style="margin:0 0 4px;">${s.name_display}</h2>
-      <p style="color:var(--ink-mute);margin:0 0 16px;font-size:13px;">${s.age_range}${s.gender} · 主責:${s.coach_main} · ${s.status}</p>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+        <div style="flex:1;">
+          <h2 style="margin:0 0 4px;">${s.name_display}</h2>
+          <p style="color:var(--ink-mute);margin:0 0 16px;font-size:13px;">${s.age_range}${s.gender} · 主責:${s.coach_main} · ${s.status}</p>
+        </div>
+        <button class="btn btn-danger" style="padding:6px 12px;font-size:12px;" onclick="deleteStudent('${s.student_id}', '${s.name_display}')">🗑 刪除學員</button>
+      </div>
       ${folderLink}
       <h4 style="margin-top:18px;">主訴</h4><p>${s.chief_complaint||'—'}</p>
       <h4>病史</h4><p>${s.medical_history||'—'}</p>
