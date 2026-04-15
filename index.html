@@ -465,7 +465,7 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.6; }
       </div>
 
       <div class="btn-row">
-        <button class="btn btn-primary" onclick="saveStudent()">儲存並同步 ↗</button>
+        <button class="btn btn-primary" onclick="saveStudent(event)">儲存並同步 ↗</button>
       </div>
     </div>
 
@@ -500,7 +500,7 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.6; }
         <div class="field"><label>瓶頸/下月調整</label><textarea id="l-bottleneck"></textarea></div>
       </div>
       <div class="btn-row">
-        <button class="btn btn-primary" onclick="saveLog()">儲存並同步 ↗</button>
+        <button class="btn btn-primary" onclick="saveLog(event)">儲存並同步 ↗</button>
       </div>
     </div>
 
@@ -522,15 +522,15 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.6; }
 
     <div class="search-box">
       <span>🔍</span>
-      <input type="text" id="search-input" placeholder="試試:五十肩 / 椎間盤+DNS / 疼痛改善..." onkeypress="if(event.key==='Enter')runSearch()">
+      <input type="text" id="search-input" placeholder="試試:五十肩 / 椎間盤+DNS / 疼痛改善..." oninput="debouncedSearch()" onkeypress="if(event.key==='Enter')runSearch()">
       <button class="search-btn" onclick="runSearch()">搜尋</button>
     </div>
 
     <div class="filter-bar">
-      <div><p class="f-label">🏥 症狀</p><select id="f-symptom"><option value="">全部</option></select></div>
-      <div><p class="f-label">👥 族群</p><select id="f-population"><option value="">全部</option></select></div>
-      <div><p class="f-label">🏋️ 方法</p><select id="f-method"><option value="">全部</option></select></div>
-      <div><p class="f-label">✨ 成效</p><select id="f-outcome"><option value="">全部</option></select></div>
+      <div><p class="f-label">🏥 症狀</p><select id="f-symptom" onchange="runSearch()"><option value="">全部</option></select></div>
+      <div><p class="f-label">👥 族群</p><select id="f-population" onchange="runSearch()"><option value="">全部</option></select></div>
+      <div><p class="f-label">🏋️ 方法</p><select id="f-method" onchange="runSearch()"><option value="">全部</option></select></div>
+      <div><p class="f-label">✨ 成效</p><select id="f-outcome" onchange="runSearch()"><option value="">全部</option></select></div>
     </div>
 
     <p class="result-count" id="result-count"></p>
@@ -582,8 +582,8 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.6; }
 <div class="toast" id="toast"></div>
 
 <script>
-const CFG_KEY = 'lanbo_casevault_config';
-const CACHE_KEY = 'lanbo_casevault_cache';
+const CFG_KEY = 'Rambo_casevault_config';
+const CACHE_KEY = 'Rambo_casevault_cache';
 
 let CFG = {};
 let TAGS = { symptom: [], population: [], method: [], outcome: [] };
@@ -896,7 +896,7 @@ function switchLevel(lv) {
   });
 }
 
-async function saveStudent() {
+async function saveStudent(ev) {
   const consent = document.querySelector('input[name=d-consent]:checked');
   const payload = {
     name_real: document.getElementById('d-name-real').value.trim(),
@@ -917,16 +917,42 @@ async function saveStudent() {
   };
   if (!payload.name_real || !payload.name_display) return showToast('請填寫姓名', 'error');
 
+  // Optimistic UX: show progress immediately
+  const btn = (ev && ev.target) || document.querySelector('#form-L1 .btn-primary');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading"></span>儲存中...';
+  showToast('儲存中,請稍候...');
+
   try {
     const res = await api('save_student', { payload });
-    showToast('✓ 學員已建檔 (' + res.student_id + ') · Drive 資料夾已自動建立');
-    loadInitialData();
+    const took = res._took_ms ? ' (' + res._took_ms + 'ms)' : '';
+    showToast('✓ 學員已建檔 ' + res.student_id + took);
+    // Optimistically add to local STUDENTS array (avoid full reload)
+    const newStu = Object.assign({}, payload, {
+      student_id: res.student_id, status: '追蹤中', created_at: new Date().toISOString()
+    });
+    if (res.mode === 'create') STUDENTS.push(newStu);
+    else {
+      const idx = STUDENTS.findIndex(s => s.student_id === res.student_id);
+      if (idx >= 0) STUDENTS[idx] = Object.assign(STUDENTS[idx], newStu);
+    }
+    cacheData({ settings: SETTINGS, tags: { tags: TAGS }, students: STUDENTS });
+    renderStudentSelects();
+    renderStats();
+    // Clear form
+    ['d-name-real','d-name-display','d-phone','d-complaint','d-history','d-goal-short','d-goal-long']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    document.querySelectorAll('#form-L1 .chip.active').forEach(c => c.classList.remove('active'));
   } catch (err) {
     showToast('儲存失敗:' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 
-async function saveLog() {
+async function saveLog(ev) {
   const studentId = document.getElementById('l-student').value;
   const month = document.getElementById('l-month').value;
   if (!studentId || !month) return showToast('請選學員與月份', 'error');
@@ -944,15 +970,27 @@ async function saveLog() {
     bottleneck: document.getElementById('l-bottleneck').value.trim(),
     created_by: CFG.coach
   };
+  const btn = (ev && ev.target) || document.querySelector('#form-L2 .btn-primary');
+  const txt = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading"></span>儲存中...';
   try {
     const res = await api('save_log', { payload });
-    showToast('✓ 月度摘要已儲存 (' + res.log_id + ')');
+    const took = res._took_ms ? ' (' + res._took_ms + 'ms)' : '';
+    showToast('✓ 月度摘要已儲存 ' + res.log_id + took);
   } catch (err) {
     showToast('儲存失敗:' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = txt;
   }
 }
 
 // ============ SEARCH ============
+let _searchCache = {};
+let _searchTimer = null;
+const SEARCH_CACHE_TTL = 60000; // 1 minute
+
 async function runSearch() {
   const q = document.getElementById('search-input').value.trim();
   const sym = document.getElementById('f-symptom').value;
@@ -960,13 +998,34 @@ async function runSearch() {
   const mth = document.getElementById('f-method').value;
   const out = document.getElementById('f-outcome').value;
 
-  document.getElementById('result-count').textContent = '搜尋中...';
+  // Cache key
+  const cacheKey = JSON.stringify({ q, sym, pop, mth, out });
+  const cached = _searchCache[cacheKey];
+  if (cached && Date.now() - cached.ts < SEARCH_CACHE_TTL) {
+    renderResults(cached.items);
+    document.getElementById('result-count').textContent =
+      `找到 ${cached.items.length} 個案例 (快取)`;
+    return;
+  }
+
+  const t0 = Date.now();
+  document.getElementById('result-count').innerHTML = '<span class="loading"></span>搜尋中...';
   try {
     const res = await api('search', { query: q, symptom: sym, population: pop, method: mth, outcome: out });
-    renderResults(res.items || []);
+    const items = res.items || [];
+    _searchCache[cacheKey] = { items, ts: Date.now() };
+    renderResults(items);
+    const took = Date.now() - t0;
+    document.getElementById('result-count').textContent =
+      `找到 ${items.length} 個案例 (${took}ms)`;
   } catch (err) {
     document.getElementById('result-count').textContent = '搜尋失敗:' + err.message;
   }
+}
+
+function debouncedSearch() {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(runSearch, 400);
 }
 
 function renderResults(items) {
