@@ -291,7 +291,10 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.6; }
     <label>你的名字 (教練)</label>
     <select id="setup-coach">
       <option value="">選擇...</option>
-      <option>藍波健康體能</option>
+      <option>阿明</option>
+      <option>小傑</option>
+      <option>阿芳</option>
+      <option>Gary</option>
     </select>
   </div>
   <div class="btn-row">
@@ -624,26 +627,32 @@ function bindTabs() {
   });
 }
 
+// Global data stores (loaded from bulk_load)
+let LOGS = [];
+let MILESTONES = [];
+
 async function loadInitialData() {
   try {
     setSync('online');
-    const [settings, tags, students] = await Promise.all([
-      api('get_settings'),
-      api('list_tags'),
-      api('list_students', { coach: CFG.coach })
-    ]);
-    SETTINGS = settings;
-    TAGS = tags.tags;
-    STUDENTS = students.items || [];
-    cacheData({ settings, tags, students: STUDENTS });
+    const t0 = Date.now();
+    const bulk = await api('bulk_load', { coach: CFG.coach });
+    SETTINGS = bulk.settings;
+    TAGS = bulk.tags;
+    STUDENTS = bulk.students || [];
+    LOGS = bulk.logs || [];
+    MILESTONES = bulk.milestones || [];
+    cacheData({ settings: SETTINGS, tags: { tags: TAGS }, students: STUDENTS, logs: LOGS, milestones: MILESTONES });
     renderAll();
+    console.log('bulk_load took', Date.now() - t0, 'ms | students:', STUDENTS.length, 'logs:', LOGS.length, 'milestones:', MILESTONES.length);
   } catch (err) {
     setSync('offline');
     showToast('連線失敗,使用本地快取', 'error');
     const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
     if (cache.settings) SETTINGS = cache.settings;
-    if (cache.tags) TAGS = cache.tags.tags;
+    if (cache.tags) TAGS = cache.tags.tags || cache.tags;
     if (cache.students) STUDENTS = cache.students;
+    if (cache.logs) LOGS = cache.logs;
+    if (cache.milestones) MILESTONES = cache.milestones;
     renderAll();
   }
 }
@@ -768,8 +777,8 @@ function renderStats() {
   const html = `
     <div class="stat"><div class="n">${STUDENTS.length}</div><div class="l">總個案</div></div>
     <div class="stat"><div class="n">${STUDENTS.filter(s=>s.status==='追蹤中').length}</div><div class="l">追蹤中</div></div>
+    <div class="stat"><div class="n">${MILESTONES.length}</div><div class="l">里程碑事件</div></div>
     <div class="stat"><div class="n">${STUDENTS.filter(s=>s.consent_level==1||s.consent_level==2).length}</div><div class="l">可分享</div></div>
-    <div class="stat"><div class="n">${STUDENTS.filter(s=>s.coach_main===CFG.coach).length}</div><div class="l">我負責</div></div>
   `;
   document.getElementById('stats').innerHTML = html;
 }
@@ -984,60 +993,97 @@ async function saveLog(ev) {
   }
 }
 
-// ============ SEARCH ============
-let _searchCache = {};
+// ============ SEARCH (100% local — zero network) ============
 let _searchTimer = null;
-const SEARCH_CACHE_TTL = 60000; // 1 minute
 
-async function runSearch() {
-  const q = document.getElementById('search-input').value.trim();
-  const sym = document.getElementById('f-symptom').value;
-  const pop = document.getElementById('f-population').value;
-  const mth = document.getElementById('f-method').value;
-  const out = document.getElementById('f-outcome').value;
+function runSearch() {
+  const t0 = performance.now();
+  const q = document.getElementById('search-input').value.trim().toLowerCase();
+  const symFilter = document.getElementById('f-symptom').value;
+  const popFilter = document.getElementById('f-population').value;
+  const mthFilter = document.getElementById('f-method').value;
+  const outFilter = document.getElementById('f-outcome').value;
 
-  // Cache key
-  const cacheKey = JSON.stringify({ q, sym, pop, mth, out });
-  const cached = _searchCache[cacheKey];
-  if (cached && Date.now() - cached.ts < SEARCH_CACHE_TTL) {
-    renderResults(cached.items);
-    document.getElementById('result-count').textContent =
-      `找到 ${cached.items.length} 個案例 (快取)`;
-    return;
-  }
+  // Pre-index logs and milestones by student_id
+  const logsByStudent = {};
+  const msByStudent = {};
+  LOGS.forEach(l => {
+    if (!logsByStudent[l.student_id]) logsByStudent[l.student_id] = [];
+    logsByStudent[l.student_id].push(l);
+  });
+  MILESTONES.forEach(m => {
+    if (!msByStudent[m.student_id]) msByStudent[m.student_id] = [];
+    msByStudent[m.student_id].push(m);
+  });
 
-  const t0 = Date.now();
-  document.getElementById('result-count').innerHTML = '<span class="loading"></span>搜尋中...';
-  try {
-    const res = await api('search', { query: q, symptom: sym, population: pop, method: mth, outcome: out });
-    const items = res.items || [];
-    _searchCache[cacheKey] = { items, ts: Date.now() };
-    renderResults(items);
-    const took = Date.now() - t0;
-    document.getElementById('result-count').textContent =
-      `找到 ${items.length} 個案例 (${took}ms)`;
-  } catch (err) {
-    document.getElementById('result-count').textContent = '搜尋失敗:' + err.message;
-  }
+  const results = STUDENTS.map(stu => {
+    let score = 0;
+    const reasons = [];
+    const symTags = (stu.symptom_tags || '').toString();
+    const popTags = (stu.population_tags || '').toString();
+
+    if (symFilter && symTags.includes(symFilter)) { score += 30; reasons.push('症狀'); }
+    if (popFilter && popTags.includes(popFilter)) { score += 20; reasons.push('族群'); }
+
+    if (q) {
+      const hay = [stu.name_display, symTags, popTags,
+        stu.chief_complaint, stu.medical_history, stu.goal_short, stu.goal_long]
+        .join(' ').toLowerCase();
+      if (hay.includes(q)) { score += 25; reasons.push('文字'); }
+    }
+
+    const stuLogs = logsByStudent[stu.student_id] || [];
+    const stuMs = msByStudent[stu.student_id] || [];
+
+    for (const l of stuLogs) {
+      const mt = (l.method_tags || '').toString();
+      const ot = (l.outcome_tags || '').toString();
+      if (mthFilter && mt.includes(mthFilter)) { score += 15; if (!reasons.includes('方法')) reasons.push('方法'); }
+      if (outFilter && ot.includes(outFilter)) { score += 15; if (!reasons.includes('成效')) reasons.push('成效'); }
+      if (q && (l.progress_summary || '').toString().toLowerCase().includes(q)) score += 10;
+    }
+    for (const m of stuMs) {
+      if (q && (m.content || '').toString().toLowerCase().includes(q)) score += 10;
+      const mt = (m.method_tags || '').toString();
+      const ot = (m.outcome_tags || '').toString();
+      if (mthFilter && mt.includes(mthFilter)) score += 10;
+      if (outFilter && ot.includes(outFilter)) score += 10;
+    }
+
+    return {
+      student: stu, score, reasons,
+      log_count: stuLogs.length,
+      milestone_count: stuMs.length,
+      latest_milestone: stuMs.length > 0
+        ? stuMs.sort((a,b) => (b.event_date||'').toString().localeCompare((a.event_date||'').toString()))[0]
+        : null
+    };
+  });
+
+  // If no filters at all, show all students
+  const hasFilter = q || symFilter || popFilter || mthFilter || outFilter;
+  const matched = hasFilter
+    ? results.filter(r => r.score > 0).sort((a,b) => b.score - a.score)
+    : results.sort((a,b) => (b.student.created_at||'').toString().localeCompare((a.student.created_at||'').toString()));
+
+  const took = (performance.now() - t0).toFixed(0);
+  document.getElementById('result-count').textContent =
+    hasFilter ? `找到 ${matched.length} 個案例 (${took}ms · 本地搜尋)` : `全部 ${matched.length} 個案例`;
+  renderResults(matched);
 }
 
 function debouncedSearch() {
   clearTimeout(_searchTimer);
-  _searchTimer = setTimeout(runSearch, 400);
+  _searchTimer = setTimeout(runSearch, 150);  // faster debounce since it's local
 }
 
 // Force-clear all caches (front + back end), then reload data
 async function forceReload() {
   showToast('🔄 強制重新整理中...');
   try {
-    // Clear backend cache
     await api('force_reload');
-    // Clear frontend cache
-    _searchCache = {};
     localStorage.removeItem(CACHE_KEY);
-    // Reload everything
     await loadInitialData();
-    // Re-run search if on search panel
     if (document.querySelector('.tab-btn[data-tab=search]').classList.contains('active')) {
       runSearch();
     }
@@ -1049,7 +1095,7 @@ async function forceReload() {
 
 // Delete a student (with cascade to logs and milestones)
 async function deleteStudent(studentId, displayName) {
-  if (!confirm(`⚠️ 確定要刪除學員「${displayName}」?\n\n會一併刪除該學員所有的:\n- L2 月度紀錄\n- L3 里程碑事件\n\n(Drive 資料夾不會自動刪除,如需刪除請去 Drive 手動處理)\n\n此操作無法復原。`)) {
+  if (!confirm(`⚠️ 確定要刪除學員「${displayName}」?\n\n會一併刪除該學員所有的:\n- L2 月度紀錄\n- L3 里程碑事件\n\n此操作無法復原。`)) {
     return;
   }
   try {
@@ -1058,8 +1104,9 @@ async function deleteStudent(studentId, displayName) {
     showToast(`✓ 已刪除 ${displayName} (含 ${res.deleted_logs} 筆 L2 + ${res.deleted_milestones} 筆 L3)`);
     // Update local state
     STUDENTS = STUDENTS.filter(s => s.student_id !== studentId);
-    _searchCache = {};
-    cacheData({ settings: SETTINGS, tags: { tags: TAGS }, students: STUDENTS });
+    LOGS = LOGS.filter(l => l.student_id !== studentId);
+    MILESTONES = MILESTONES.filter(m => m.student_id !== studentId);
+    cacheData({ settings: SETTINGS, tags: { tags: TAGS }, students: STUDENTS, logs: LOGS, milestones: MILESTONES });
     renderStudentSelects();
     renderStats();
     closeDetail();
@@ -1096,48 +1143,159 @@ function renderResults(items) {
   document.getElementById('case-list').innerHTML = html;
 }
 
-async function showDetail(studentId) {
-  try {
-    const [stuRes, logsRes, msRes, folderRes] = await Promise.all([
-      api('get_student', { student_id: studentId }),
-      api('list_logs', { student_id: studentId }),
-      api('list_milestones', { student_id: studentId }),
-      api('get_student_folder', { student_id: studentId })
-    ]);
-    const s = stuRes.item;
-    const logs = logsRes.items || [];
-    const ms = msRes.items || [];
+// showDetail: 100% local data, no API call. Instant.
+function showDetail(studentId) {
+  const s = STUDENTS.find(x => x.student_id === studentId);
+  if (!s) return showToast('找不到學員', 'error');
+  const logs = LOGS.filter(l => l.student_id === studentId)
+    .sort((a,b) => (b.year_month||'').toString().localeCompare((a.year_month||'').toString()));
+  const ms = MILESTONES.filter(m => m.student_id === studentId)
+    .sort((a,b) => (b.event_date||'').toString().localeCompare((a.event_date||'').toString()));
 
-    const folderLink = folderRes.ok
-      ? `<a href="${folderRes.folder_url}" target="_blank" class="drive-link">📁 開啟 Drive 資料夾</a>`
-      : '';
+  const esc = (v) => (v||'').toString().replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  const consentLabel = {1:'🟢 完全公開',2:'🟢 去識別化',3:'🟡 內部教學',4:'🔴 僅存檔'}[s.consent_level] || '';
 
-    const html = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
-        <div style="flex:1;">
-          <h2 style="margin:0 0 4px;">${s.name_display}</h2>
-          <p style="color:var(--ink-mute);margin:0 0 16px;font-size:13px;">${s.age_range}${s.gender} · 主責:${s.coach_main} · ${s.status}</p>
-        </div>
-        <button class="btn btn-danger" style="padding:6px 12px;font-size:12px;" onclick="deleteStudent('${s.student_id}', '${s.name_display}')">🗑 刪除學員</button>
+  const html = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <h2 style="margin:0 0 4px;">${s.name_display}</h2>
+        <p style="color:var(--ink-mute);margin:0 0 4px;font-size:13px;">${s.age_range}${s.gender} · 主責:${s.coach_main} · ${s.status} · ${consentLabel}</p>
       </div>
-      ${folderLink}
-      <h4 style="margin-top:18px;">主訴</h4><p>${s.chief_complaint||'—'}</p>
-      <h4>病史</h4><p>${s.medical_history||'—'}</p>
-      <h4>目標</h4><p>短期:${s.goal_short||'—'}<br>長期:${s.goal_long||'—'}</p>
-      <h4>L3 里程碑事件 (${ms.length} 筆)</h4>
-      ${ms.slice(0,5).map(m => `<div style="padding:10px;background:var(--bg);border-radius:8px;margin-bottom:6px;font-size:13px;">
-        <strong>${m.event_date} · ${m.event_type}</strong><br>${m.content||''}
-        ${m.attachments ? '<br><span style="font-size:11px;color:var(--ink-mute);">📎 附件 ' + m.attachments.split(',').length + ' 個</span>' : ''}
-      </div>`).join('') || '<p>無</p>'}
-      <h4>L2 月度摘要 (${logs.length} 筆)</h4>
-      ${logs.slice(0,3).map(l => `<div style="padding:10px;background:var(--bg);border-radius:8px;margin-bottom:6px;font-size:13px;">
-        <strong>${l.year_month}</strong> · ${l.method_tags||''}<br>${l.progress_summary||''}
-      </div>`).join('') || '<p>無</p>'}
-    `;
-    document.getElementById('detail-content').innerHTML = html;
-    document.getElementById('detail-view').classList.add('show');
+      <div style="display:flex;gap:6px;">
+        <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="openEditStudent('${s.student_id}')">✏️ 編輯</button>
+        <button class="btn btn-danger" style="padding:6px 12px;font-size:12px;" onclick="deleteStudent('${s.student_id}', '${esc(s.name_display)}')">🗑 刪除</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0;">
+      <div style="background:var(--bg);padding:10px;border-radius:8px;font-size:13px;">
+        <span style="color:var(--ink-mute);">症狀:</span> ${s.symptom_tags||'—'}
+      </div>
+      <div style="background:var(--bg);padding:10px;border-radius:8px;font-size:13px;">
+        <span style="color:var(--ink-mute);">族群:</span> ${s.population_tags||'—'}
+      </div>
+    </div>
+    <h4 style="margin-top:14px;">主訴</h4><p style="font-size:14px;">${s.chief_complaint||'—'}</p>
+    <h4>病史</h4><p style="font-size:14px;">${s.medical_history||'—'}</p>
+    <h4>目標</h4><p style="font-size:14px;">短期:${s.goal_short||'—'}<br>長期:${s.goal_long||'—'}</p>
+    <h4>L3 里程碑事件 (${ms.length} 筆)</h4>
+    ${ms.slice(0,5).map(m => `<div style="padding:10px;background:var(--bg);border-radius:8px;margin-bottom:6px;font-size:13px;">
+      <strong>${m.event_date} · ${m.event_type}</strong><br>${m.content||''}
+    </div>`).join('') || '<p style="color:var(--ink-mute);">無</p>'}
+    <h4>L2 月度摘要 (${logs.length} 筆)</h4>
+    ${logs.slice(0,3).map(l => `<div style="padding:10px;background:var(--bg);border-radius:8px;margin-bottom:6px;font-size:13px;">
+      <strong>${l.year_month}</strong> · ${l.method_tags||''}<br>${l.progress_summary||''}
+    </div>`).join('') || '<p style="color:var(--ink-mute);">無</p>'}
+  `;
+  document.getElementById('detail-content').innerHTML = html;
+  document.getElementById('detail-view').classList.add('show');
+}
+
+// ============ EDIT STUDENT (inline in detail modal) ============
+
+function openEditStudent(studentId) {
+  const s = STUDENTS.find(x => x.student_id === studentId);
+  if (!s) return;
+
+  const coaches = (SETTINGS.coaches || []);
+  const ages = (SETTINGS.age_ranges || ['30-39','40-49','50-59','60-69','70+']);
+  const coachOpts = coaches.map(c => `<option ${c===s.coach_main?'selected':''}>${c}</option>`).join('');
+  const ageOpts = ages.map(a => `<option ${a===s.age_range?'selected':''}>${a}</option>`).join('');
+  const genderOpts = ['女','男'].map(g => `<option ${g===s.gender?'selected':''}>${g}</option>`).join('');
+  const statusOpts = ['追蹤中','畢業','中斷'].map(st => `<option ${st===s.status?'selected':''}>${st}</option>`).join('');
+  const esc = (v) => (v||'').toString().replace(/"/g, '&quot;');
+
+  const html = `
+    <h2 style="margin:0 0 14px;">✏️ 編輯學員: ${s.name_display}</h2>
+    <div style="font-size:12px;color:var(--ink-mute);margin-bottom:14px;">Student ID: ${s.student_id}</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="field"><label style="font-size:12px;color:var(--ink-soft);">真實姓名</label>
+        <input type="text" id="edit-name-real" value="${esc(s.name_real)}"></div>
+      <div class="field"><label style="font-size:12px;color:var(--ink-soft);">顯示名(化名)</label>
+        <input type="text" id="edit-name-display" value="${esc(s.name_display)}"></div>
+      <div class="field"><label style="font-size:12px;color:var(--ink-soft);">聯絡電話</label>
+        <input type="tel" id="edit-phone" value="${esc(s.phone)}"></div>
+      <div class="field"><label style="font-size:12px;color:var(--ink-soft);">主責教練</label>
+        <select id="edit-coach">${coachOpts}</select></div>
+      <div class="field"><label style="font-size:12px;color:var(--ink-soft);">年齡區間</label>
+        <select id="edit-age">${ageOpts}</select></div>
+      <div class="field"><label style="font-size:12px;color:var(--ink-soft);">性別</label>
+        <select id="edit-gender">${genderOpts}</select></div>
+      <div class="field"><label style="font-size:12px;color:var(--ink-soft);">狀態</label>
+        <select id="edit-status">${statusOpts}</select></div>
+      <div class="field"><label style="font-size:12px;color:var(--ink-soft);">同意等級</label>
+        <select id="edit-consent">
+          <option value="1" ${s.consent_level==1?'selected':''}>1 完全公開</option>
+          <option value="2" ${s.consent_level==2?'selected':''}>2 去識別化</option>
+          <option value="3" ${s.consent_level==3?'selected':''}>3 內部教學</option>
+          <option value="4" ${s.consent_level==4?'selected':''}>4 僅存檔</option>
+        </select></div>
+    </div>
+
+    <div class="field"><label style="font-size:12px;color:var(--ink-soft);">族群標籤 (逗號分隔)</label>
+      <input type="text" id="edit-pop-tags" value="${esc(s.population_tags)}"></div>
+    <div class="field"><label style="font-size:12px;color:var(--ink-soft);">症狀標籤 (逗號分隔)</label>
+      <input type="text" id="edit-sym-tags" value="${esc(s.symptom_tags)}"></div>
+    <div class="field"><label style="font-size:12px;color:var(--ink-soft);">主訴</label>
+      <textarea id="edit-complaint" style="min-height:60px;">${s.chief_complaint||''}</textarea></div>
+    <div class="field"><label style="font-size:12px;color:var(--ink-soft);">病史/診斷</label>
+      <textarea id="edit-history" style="min-height:60px;">${s.medical_history||''}</textarea></div>
+    <div class="field"><label style="font-size:12px;color:var(--ink-soft);">短期目標 (3個月)</label>
+      <textarea id="edit-goal-short" style="min-height:50px;">${s.goal_short||''}</textarea></div>
+    <div class="field"><label style="font-size:12px;color:var(--ink-soft);">長期目標</label>
+      <textarea id="edit-goal-long" style="min-height:50px;">${s.goal_long||''}</textarea></div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-edit-save" onclick="saveEditStudent('${s.student_id}')">儲存修改 ↗</button>
+      <button class="btn btn-ghost" onclick="showDetail('${s.student_id}')">取消</button>
+    </div>
+  `;
+  document.getElementById('detail-content').innerHTML = html;
+}
+
+async function saveEditStudent(studentId) {
+  const payload = {
+    student_id: studentId,
+    name_real: document.getElementById('edit-name-real').value.trim(),
+    name_display: document.getElementById('edit-name-display').value.trim(),
+    phone: document.getElementById('edit-phone').value.trim(),
+    coach_main: document.getElementById('edit-coach').value,
+    age_range: document.getElementById('edit-age').value,
+    gender: document.getElementById('edit-gender').value,
+    status: document.getElementById('edit-status').value,
+    consent_level: document.getElementById('edit-consent').value,
+    population_tags: document.getElementById('edit-pop-tags').value.trim(),
+    symptom_tags: document.getElementById('edit-sym-tags').value.trim(),
+    chief_complaint: document.getElementById('edit-complaint').value.trim(),
+    medical_history: document.getElementById('edit-history').value.trim(),
+    goal_short: document.getElementById('edit-goal-short').value.trim(),
+    goal_long: document.getElementById('edit-goal-long').value.trim(),
+    created_by: CFG.coach
+  };
+  if (!payload.name_display) return showToast('顯示名不能空白', 'error');
+
+  const btn = document.getElementById('btn-edit-save');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading"></span>儲存中...';
+
+  try {
+    const res = await api('save_student', { payload });
+    const took = res._took_ms ? ` (${res._took_ms}ms)` : '';
+    showToast('✓ 學員資料已更新' + took);
+
+    // Optimistic local update
+    const idx = STUDENTS.findIndex(s => s.student_id === studentId);
+    if (idx >= 0) STUDENTS[idx] = Object.assign(STUDENTS[idx], payload);
+    cacheData({ settings: SETTINGS, tags: { tags: TAGS }, students: STUDENTS, logs: LOGS, milestones: MILESTONES });
+    renderStudentSelects();
+    renderStats();
+
+    // Switch back to detail view
+    showDetail(studentId);
   } catch (err) {
-    showToast('載入失敗:' + err.message, 'error');
+    showToast('儲存失敗:' + err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '儲存修改 ↗';
   }
 }
 
@@ -1150,8 +1308,8 @@ function populateAdmin() {
   document.getElementById('cfg-url').value = CFG.url || '';
   document.getElementById('cfg-key').value = CFG.key || '';
   renderConfigSelects();
-  document.getElementById('info-version').textContent = SETTINGS.version || '2.0';
-  document.getElementById('info-cache').textContent = STUDENTS.length + ' 學員';
+  document.getElementById('info-version').textContent = SETTINGS.version || '2.3';
+  document.getElementById('info-cache').textContent = STUDENTS.length + ' 學員 · ' + LOGS.length + ' L2 · ' + MILESTONES.length + ' L3';
   document.getElementById('info-drive').textContent = SETTINGS.drive_root_id ? '已設定' : '未設定 (執行 test_init_root_folder)';
 }
 
