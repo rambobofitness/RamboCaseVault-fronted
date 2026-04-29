@@ -210,8 +210,8 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.6; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
 .toast.error { background: var(--danger); }
 
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
-@media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+.stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 14px; }
+@media (max-width: 560px) { .stats { grid-template-columns: repeat(3, 1fr); } }
 .stat { background: var(--surface); padding: 12px; border-radius: var(--radius); border: 1px solid var(--line); }
 .stat .n { font-size: 22px; font-weight: 600; line-height: 1; }
 .stat .l { font-size: 11px; color: var(--ink-mute); margin-top: 4px; }
@@ -774,11 +774,13 @@ function renderSearchFilters() {
 }
 
 function renderStats() {
+  const myCount = STUDENTS.filter(s => s.coach_main === CFG.coach).length;
   const html = `
     <div class="stat"><div class="n">${STUDENTS.length}</div><div class="l">總個案</div></div>
     <div class="stat"><div class="n">${STUDENTS.filter(s=>s.status==='追蹤中').length}</div><div class="l">追蹤中</div></div>
     <div class="stat"><div class="n">${MILESTONES.length}</div><div class="l">里程碑事件</div></div>
     <div class="stat"><div class="n">${STUDENTS.filter(s=>s.consent_level==1||s.consent_level==2).length}</div><div class="l">可分享</div></div>
+    <div class="stat"><div class="n">${myCount}</div><div class="l">我負責</div></div>
   `;
   document.getElementById('stats').innerHTML = html;
 }
